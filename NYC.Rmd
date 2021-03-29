@@ -7,24 +7,258 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+# Import libraries
+library(tidyverse)
+library(corrplot)
 ```
 
-## R Markdown
+## Introduction
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+In this project we want to assess whether student, teacher, and parent perceptions of NYC school quality appear to be related to demographic and academic success metrics. We also want to assess whether they all have similar perceptions of NYC school quality.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+The project also servers the purpose of devloping my data cleaning skills in R.
 
-```{r cars}
-summary(cars)
+The data has been downloaded from the following locations:
+
+* https://data.world/dataquest/nyc-schools-data/workspace/file?filename=combined.csv
+* https://data.cityofnewyork.us/Education/2011-NYC-School-Survey/mnz3-dyi8
+
+We have loaded the tidyverse and corrplot packages for this exercise. To import the **combined** data, we use `read_csv`. This is data we cleaned in a previous exericse which will be of use here. For the **general schools** data and **district 75 schools** data, we ue `read_tsv`.
+
+From reading the `data dictionary` we can see that there is a `DBN` column, which we'll use as a key when combining datasets.
+
+```{r}
+# Load in combined data on schools
+combined <- read_csv("combined.csv", col_types = cols())
+
+# Load in survey data for general schools
+general <- read_tsv("masterfile11_gened_final.txt", col_types = cols())
+
+# Load in survey data for District 75 schools
+district_75 <- read_tsv("masterfile11_d75_final.txt", col_types = cols())
 ```
 
-## Including Plots
+## Exploring Data
 
-You can also embed plots, for example:
+```{r}
+# Combined data
+glimpse(combined)
+```
+```{r}
+# General Data
+head(general)
+```
+```{r}
+# District 75 data
+head(district_75)
+```
+## Removing Data
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+From examining the data, and using the `Data Dictionary` as a guide, we can see that some of these columsn are very specific. For example, `s_q1a_1` contains, for each school, the number of students that responded to "option 1" of "question 1a." 
+
+This data we can likely ignore for this analysis. To make analysis easier we'll remove these columns. 
+
+We will keep the columns which give us the aggregate scores for each school. The last aggregate score column in the dataframes is `aca_tot_10`
+
+
+```{r}
+# Filter general school survey data
+survey_general <- general %>%
+  select(dbn:aca_tot_11)
+
+# Filter district 75 school data
+survey_district <- district_75 %>% 
+  select(dbn:aca_tot_11)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+We also want to filter these data frames to only select High Schools. Is this possible?
+
+
+```{r}
+unique(survey_general$schooltype)
+```
+```{r}
+unique(survey_district$schooltype)
+```
+For general school survey data, let's filter by "High School"
+
+```{r}
+# Filter by high school
+survey_general <- survey_general %>%
+  filter(schooltype == "High School")
+```
+
+For the district 75 data, we only have one value of school type. We might assume that the `highschool` column tells us whether the school in question is a high school or not. 1 == high school, 0 != high school. But difficult to know for sure.
+
+Let's looks back the general data, which has the same column, and try to make a decision based on that.
+
+```{r}
+survey_general %>%
+  select(highschool, schooltype) %>%
+  head()
+```
+We would expect a 1 to appear next to high school. As there is not, we'll just leave it for now regarding the district data.
+
+```{r}
+survey_district
+survey_general
+```
+
+## Combining Data
+
+Next up, we want to combine the general and distinct dataframes. We'll use `bind_rows` for this.
+
+```{r}
+# Combine dataframes
+general_district <- survey_general %>%
+  bind_rows(survey_district)
+
+general_district
+```
+
+Now that we've combined those dataframes, we'll join it up with the combined dataframe. 
+
+```{r}
+combined
+```
+
+We can do this with the `dbn` column, although we'll need to eithe rename it or set it to upper case
+
+```{r}
+# Renaming DBN column to be aligned with other dataframe
+general_district <- general_district %>%
+  rename(DBN = dbn)
+
+general_district
+```
+
+We'll now combine this dataframe to **combined** with a `left_join()`. This is because we only want to maintain rows that are present within the combined dataframe
+
+```{r}
+# Combine using left join
+combined_survey <- combined %>%
+  left_join(general_district, by = "DBN")
+```
+
+Let's have a look
+
+```{r}
+glimpse(combined_survey)
+```
+
+## Relationships
+
+Let's try answering one of our questions:
+
+**Do student, teacher, and parent perceptions of NYC school quality appear to be related to demographic and academic success metrics?**
+
+Do answer this question, we'll use the variable `avg_sat_score` as an academic metric.
+
+We'll first create a correlation matrix comparing this variable with the survey scores. From there, we can identify the relationships we are most interested in.
+
+```{r}
+# Filter the data down further. The use argument ensures that missing data is not included.
+combined_survey %>%
+  select(avg_sat_score, saf_p_11:aca_tot_11) %>%
+  cor(use = "pairwise.complete.obs") %>%
+  corrplot
+```
+In the above example. We first filtered the data by the columns we wanted, created a correlation matrix, then added this to `corrplot` to better visualize this. We ignored missing values. This shows us correlations between all variables, which isn't really want we want. We're only really interested in the first column in the above visualisation.
+
+We could also do the same, but instead of visualizing, we could convert the matrix to a tibble, then filter the data down so that we only explore medium or strong relationships.
+
+```{r}
+# Create correlation matrix
+correlations <- combined_survey %>%
+  select(avg_sat_score, saf_p_11:aca_tot_11) %>%
+  cor(use = "pairwise.complete.obs")
+
+head(correlations, 4)
+class(correlations)
+```
+So here we actually want to remove all columns except the first one. We can see that this is a matrix/array. Let's first convert it to a tibble, and only keep the first column (and also the rownames)
+
+```{r}
+correlations <- correlations %>%
+  as_tibble(rownames = "variable") %>%
+  select(variable, avg_sat_score)
+
+head(correlations, 4)
+```
+
+Next up, let's filter the data to only show correlations that are over .25, or less than -.25.
+
+```{r}
+good_correlations <- correlations %>%
+  filter(avg_sat_score > .25 | avg_sat_score < -.25)
+
+good_correlations
+```
+Now that we've got the relationships we want to explore. Let's create some scatterplots. Just so we're clear, below are what these columns represent
+
+aca_s_11 = Academic expectations score based on student responses
+saf_s_11 = Safety and Respect score based on student responses
+saf_t_11 = Safety and Respect score based on teacher responses
+saf_tot_11 = Safety and Respect total score
+
+```{r}
+selected_vars <- combined_survey %>%
+  select(avg_sat_score, c(saf_t_11, saf_s_11, aca_s_11, saf_tot_11))
+
+head(selected_vars, 4)
+```
+
+Let's try reshape the data for practice, and to help us visualise the data.
+
+aca_s_11 = Academic expectations score based on student responses
+saf_s_11 = Safety and Respect score based on student responses
+saf_t_11 = Safety and Respect score based on teacher responses
+saf_tot_11 = Safety and Respect total score
+
+```{r}
+# Pivoting data
+selected_vars_reshaped <- selected_vars %>%
+  pivot_longer(
+    cols = c(saf_t_11, saf_s_11, aca_s_11, saf_tot_11),
+    names_to = "Fields",
+    values_to = "Values"
+  ) %>%
+  drop_na()
+
+# Convert Fields to factors and rename to something more informative
+selected_vars_reshaped$Fields <- as.factor(selected_vars_reshaped$Fields)
+levels(selected_vars_reshaped$Fields) <- c("Academic Expectations - Student", "Safety & Respect - Student", "Safety & Respect - Teacher", "Safety & Respect - Total")
+
+head(selected_vars_reshaped, 5)
+```
+
+Let's now create some scatterplots with the transformed data. We're going to use `facet_wrap` to create multiple scatterplots. This is why we transformed the data in the previous step.
+
+```{r}
+# Scatterplots on the data
+selected_vars_reshaped %>%
+  ggplot(aes(x = Values, y = avg_sat_score)) +
+  geom_point(color = "navy") +
+  facet_wrap("Fields") + 
+  labs(
+    x = "Total Score", 
+    y = "Average SAT Score",
+    title = "Average SAT Score by Survey Scores"
+  ) + 
+  theme(
+    panel.background = element_rect("white")
+  )
+
+# Correlations
+c <- c(0.2925880, 0.2772681, 0.3091444, 0.2760410)
+  
+```
+
+We can see that in schools where students have done very well on their SATs on average, these schools are generally considered safe and respectful by both teachers and students alike. Although we should note the relationships aren't strong, and there are plenty schools that are ranked as safe and respectful which don't hold a high average SAT score. It appears to be more the case that safety and respect are an important factor when it comes to students doing well.
+
+Academic expectations of students also shares a relationship with average SAT scores. Now, possessing a high academic expectation may in fact help facilitate better grades. It might also be that these schools are generally considered very good schools. Inevitably students will have high expectations.
+
+
+
+
