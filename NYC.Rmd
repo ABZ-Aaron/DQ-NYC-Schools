@@ -255,10 +255,70 @@ c <- c(0.2925880, 0.2772681, 0.3091444, 0.2760410)
   
 ```
 
-We can see that in schools where students have done very well on their SATs on average, these schools are generally considered safe and respectful by both teachers and students alike. Although we should note the relationships aren't strong, and there are plenty schools that are ranked as safe and respectful which don't hold a high average SAT score. It appears to be more the case that safety and respect are an important factor when it comes to students doing well.
+We can see that in schools where students have done very well on their SATs on average, these schools are generally considered safe and respectful by both teachers and students alike. Although we should note the relationships aren't storng, and there are plenty schools that are ranked as safe and respectful which don't hold a high average SAT score. It appears to be more the case that safety and respect are an important factor when it comes to students doing well.
 
 Academic expectations of students also shares a relationship with average SAT scores. Now, possessing a high academic expectation may in fact help facilitate better grades. It might also be that these schools are generally considered very good schools. Inevitably students will have high expectations.
 
+Let's further transform our data. We'll redo part of what we've done above, using `pivot_longer` as practice. We'll also add a couple of other columns to make thing a bit clearer
 
+```{r}
+head(combined_survey)
+```
+```{r}
+# Pivot the data
+combined_pivot <- combined_survey %>%
+  pivot_longer(
+    cols = c(saf_p_11:aca_tot_11),
+    names_to = "survey_question",
+    values_to = "score"
+  )
+```
 
+We'll now create a column for `response_type` and `metric`. For example, in **saf_s_11** the metric is **saf** and the response type is **student**
 
+```{r}
+combined_pivot <- combined_pivot %>%
+  mutate(
+    metric = str_sub(survey_question, 1, 3),
+    response_type = str_sub(survey_question, 4, 6),
+    response_type = case_when(
+      response_type == "_s_" ~ "Student",
+      response_type == "_t_" ~ "Teacher",
+      response_type == "_p_" ~ "Parent",
+      response_type == "_to" ~ "Total"
+    ),
+    metric = case_when(
+      metric == "saf" ~ "Safety & Respect",
+      metric == "com" ~ "Communication",
+      metric == "eng" ~ "Engagement",
+      metric == "aca" ~ "Academic Expectations"
+    )
+  ) %>%
+  select(response_type, metric, score) %>%
+  drop_na()
+
+head(combined_pivot)
+```
+Let's first summaries the data above, then create some visualisations
+
+```{r}
+group_summary <- combined_pivot %>%
+  group_by(response_type, metric) %>%
+  summarise(average_score = mean(score)) %>%
+  arrange(response_type) 
+
+group_summary %>%
+  ggplot(aes(x = response_type, y = average_score, fill = metric)) +
+  geom_bar(position="dodge", stat="identity")
+```
+
+Let's create a boxplot instead:
+
+```{r}
+combined_pivot %>%
+  ggplot(aes(x= metric, y = score, fill = response_type)) +
+  geom_boxplot()
+```
+We could note a few things here. Survey scores for parents were hightest for Safety & Respect questions. Survey scores for students and Teachers were lowest for Communication, with some low outliers here.
+
+To be continued...
