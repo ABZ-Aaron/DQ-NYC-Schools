@@ -8,6 +8,9 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+```
+
+```{r output = FALSE}
 # Import libraries
 library(tidyverse)
 library(corrplot)
@@ -15,18 +18,20 @@ library(corrplot)
 
 ## Introduction
 
-In this project we want to assess whether student, teacher, and parent perceptions of NYC school quality appear to be related to demographic and academic success metrics. We also want to assess whether they all have similar perceptions of NYC school quality.
+In this project I want to assess whether student, teacher, and parent perceptions of NYC school quality appear to be related to success metrics. I also want to assess whether they all have similar perceptions of NYC school quality.
 
-The project also servers the purpose of devloping my data cleaning skills in R.
+The project also servers the purpose of developing my data cleaning skills in R.
 
-The data has been downloaded from the following locations:
+The data used here can be downloaded from the following locations:
 
 * https://data.world/dataquest/nyc-schools-data/workspace/file?filename=combined.csv
 * https://data.cityofnewyork.us/Education/2011-NYC-School-Survey/mnz3-dyi8
 
-We have loaded the tidyverse and corrplot packages for this exercise. To import the **combined** data, we use `read_csv`. This is data we cleaned in a previous exericse which will be of use here. For the **general schools** data and **district 75 schools** data, we ue `read_tsv`.
+I have loaded the tidyverse and corrplot packages for this exercise. 
 
-From reading the `data dictionary` we can see that there is a `DBN` column, which we'll use as a key when combining datasets.
+To import the **combined** data, I use `read_csv`. This is data I cleaned in a previous exericse which will be of use here. For the **general schools** data and **district 75 schools** data, I ue `read_tsv`.
+
+From reading the `data dictionary` we can see that there is a `DBN` column, which is also found in the combined data. I will use this as a key when combining datasets.
 
 ```{r}
 # Load in combined data on schools
@@ -45,17 +50,23 @@ district_75 <- read_tsv("masterfile11_d75_final.txt", col_types = cols())
 # Combined data
 glimpse(combined)
 ```
+I may end only using a couple of these columns. However, for now we'll leave them all in.
+
 ```{r}
 # General Data
 head(general)
 ```
+Wow, that's a lot of columns!
+
 ```{r}
 # District 75 data
 head(district_75)
 ```
+Like with the general data, there are a lot of columns in this dataset. Perhaps we can clean this up.
+
 ## Removing Data
 
-From examining the data, and using the `Data Dictionary` as a guide, we can see that some of these columsn are very specific. For example, `s_q1a_1` contains, for each school, the number of students that responded to "option 1" of "question 1a." 
+From examining the data, and using the `Data Dictionary` as a guide (see local path), we can see that some of these columns are very specific. For example, `s_q1a_1` contains, for each school, the number of students that responded to "option 1" of "question 1a." 
 
 This data we can likely ignore for this analysis. To make analysis easier we'll remove these columns. 
 
@@ -74,13 +85,14 @@ survey_district <- district_75 %>%
 
 We also want to filter these data frames to only select High Schools. Is this possible?
 
-
 ```{r}
 unique(survey_general$schooltype)
 ```
+
 ```{r}
 unique(survey_district$schooltype)
 ```
+
 For general school survey data, let's filter by "High School"
 
 ```{r}
@@ -98,12 +110,8 @@ survey_general %>%
   select(highschool, schooltype) %>%
   head()
 ```
-We would expect a 1 to appear next to high school. As there is not, we'll just leave it for now regarding the district data.
 
-```{r}
-survey_district
-survey_general
-```
+We would expect a 1 to appear next to high school. As there is not, we'll just leave it for now regarding the district data.
 
 ## Combining Data
 
@@ -113,24 +121,16 @@ Next up, we want to combine the general and distinct dataframes. We'll use `bind
 # Combine dataframes
 general_district <- survey_general %>%
   bind_rows(survey_district)
-
-general_district
 ```
 
 Now that we've combined those dataframes, we'll join it up with the combined dataframe. 
 
-```{r}
-combined
-```
-
-We can do this with the `dbn` column, although we'll need to eithe rename it or set it to upper case
+We can do this with the `dbn` column, although we'll need to first either rename it or set it to upper case.
 
 ```{r}
 # Renaming DBN column to be aligned with other dataframe
 general_district <- general_district %>%
   rename(DBN = dbn)
-
-general_district
 ```
 
 We'll now combine this dataframe to **combined** with a `left_join()`. This is because we only want to maintain rows that are present within the combined dataframe
@@ -141,19 +141,13 @@ combined_survey <- combined %>%
   left_join(general_district, by = "DBN")
 ```
 
-Let's have a look
-
-```{r}
-glimpse(combined_survey)
-```
-
 ## Relationships
 
-Let's try answering one of our questions:
+Now that our data is combined, let's try answering one of our questions:
 
-**Do student, teacher, and parent perceptions of NYC school quality appear to be related to demographic and academic success metrics?**
+**Do student, teacher, and parent perceptions of NYC school quality appear to be related to academic success metrics?**
 
-Do answer this question, we'll use the variable `avg_sat_score` as an academic metric.
+Do help answer this question, we'll use the variable `avg_sat_score` as an academic metric.
 
 We'll first create a correlation matrix comparing this variable with the survey scores. From there, we can identify the relationships we are most interested in.
 
@@ -180,16 +174,17 @@ class(correlations)
 So here we actually want to remove all columns except the first one. We can see that this is a matrix/array. Let's first convert it to a tibble, and only keep the first column (and also the rownames)
 
 ```{r}
+# Convert to tibble
 correlations <- correlations %>%
   as_tibble(rownames = "variable") %>%
   select(variable, avg_sat_score)
 
 head(correlations, 4)
 ```
-
 Next up, let's filter the data to only show correlations that are over .25, or less than -.25.
 
 ```{r}
+# Filter by Pearson's R size
 good_correlations <- correlations %>%
   filter(avg_sat_score > .25 | avg_sat_score < -.25)
 
@@ -203,18 +198,13 @@ saf_t_11 = Safety and Respect score based on teacher responses
 saf_tot_11 = Safety and Respect total score
 
 ```{r}
+# Select just the columns we're interested in
 selected_vars <- combined_survey %>%
   select(avg_sat_score, c(saf_t_11, saf_s_11, aca_s_11, saf_tot_11))
 
 head(selected_vars, 4)
 ```
-
 Let's try reshape the data for practice, and to help us visualise the data.
-
-aca_s_11 = Academic expectations score based on student responses
-saf_s_11 = Safety and Respect score based on student responses
-saf_t_11 = Safety and Respect score based on teacher responses
-saf_tot_11 = Safety and Respect total score
 
 ```{r}
 # Pivoting data
@@ -228,11 +218,13 @@ selected_vars_reshaped <- selected_vars %>%
 
 # Convert Fields to factors and rename to something more informative
 selected_vars_reshaped$Fields <- as.factor(selected_vars_reshaped$Fields)
-levels(selected_vars_reshaped$Fields) <- c("Academic Expectations - Student", "Safety & Respect - Student", "Safety & Respect - Teacher", "Safety & Respect - Total")
+levels(selected_vars_reshaped$Fields) <- c("Academic Expectations - Student", 
+                                           "Safety & Respect - Student", 
+                                           "Safety & Respect - Teacher", 
+                                           "Safety & Respect - Total")
 
 head(selected_vars_reshaped, 5)
 ```
-
 Let's now create some scatterplots with the transformed data. We're going to use `facet_wrap` to create multiple scatterplots. This is why we transformed the data in the previous step.
 
 ```{r}
@@ -254,16 +246,12 @@ selected_vars_reshaped %>%
 c <- c(0.2925880, 0.2772681, 0.3091444, 0.2760410)
   
 ```
+We can see that in schools where students have done very well on their SATs on average, these schools are generally considered safe and respectful by both teachers and students alike. Although we should note the relationships aren't strong based on Pearson's R, and there are plenty schools that are ranked as safe and respectful which don't hold a high average SAT score. It appears to be more the case that safety and respect are an important factor when it comes to students doing well.
 
-We can see that in schools where students have done very well on their SATs on average, these schools are generally considered safe and respectful by both teachers and students alike. Although we should note the relationships aren't storng, and there are plenty schools that are ranked as safe and respectful which don't hold a high average SAT score. It appears to be more the case that safety and respect are an important factor when it comes to students doing well.
-
-Academic expectations of students also shares a relationship with average SAT scores. Now, possessing a high academic expectation may in fact help facilitate better grades. It might also be that these schools are generally considered very good schools. Inevitably students will have high expectations.
+Academic expectations of students also share a relationship with average SAT scores. Now, possessing a high academic expectation may in fact help facilitate better grades. It might also be that these schools are generally considered very good schools in terms of education quality. Inevitably students will have high expectations.
 
 Let's further transform our data. We'll redo part of what we've done above, using `pivot_longer` as practice. We'll also add a couple of other columns to make thing a bit clearer
 
-```{r}
-head(combined_survey)
-```
 ```{r}
 # Pivot the data
 combined_pivot <- combined_survey %>%
@@ -277,6 +265,7 @@ combined_pivot <- combined_survey %>%
 We'll now create a column for `response_type` and `metric`. For example, in **saf_s_11** the metric is **saf** and the response type is **student**
 
 ```{r}
+# Creating additional columns
 combined_pivot <- combined_pivot %>%
   mutate(
     metric = str_sub(survey_question, 1, 3),
@@ -299,26 +288,150 @@ combined_pivot <- combined_pivot %>%
 
 head(combined_pivot)
 ```
-Let's first summaries the data above, then create some visualisations
+Let's create some visualisations
 
 ```{r}
+# Summarise Data
 group_summary <- combined_pivot %>%
   group_by(response_type, metric) %>%
   summarise(average_score = mean(score)) %>%
   arrange(response_type) 
 
+# Create BarGraph representing data
 group_summary %>%
   ggplot(aes(x = response_type, y = average_score, fill = metric)) +
-  geom_bar(position="dodge", stat="identity")
+  geom_bar(position="dodge", stat="identity") +
+  labs(
+    x = "Responders",
+    y = "Average Score",
+    title = "Average Score by Responders and Question Type"
+  )
 ```
 
-Let's create a boxplot instead:
+This may be slightly difficut to interpret, on initial glance. 
+
+Let's create some boxplots.
 
 ```{r}
 combined_pivot %>%
+  filter(response_type != "Total") %>%
   ggplot(aes(x= metric, y = score, fill = response_type)) +
-  geom_boxplot()
+  geom_boxplot() +
+  labs(
+    title = "Survey Score by Reponders and Question Type",
+    x = "Question Type",
+    y = "Survey Score"
+  ) + 
+  theme(
+    panel.background = element_rect("white")
+  )
 ```
 We could note a few things here. Survey scores for parents were hightest for Safety & Respect questions. Survey scores for students and Teachers were lowest for Communication, with some low outliers here.
 
-To be continued...
+Generally, parents have more positive perceptions of safety and respect at schools, and other metrics, compared to students or teachers. Perhaps this is because they don't attend, and only have word-of=mouth to inform their perceptions.
+
+There also seems to be more varied scores among teachers for all question types. This is interesting, and perhaps requires further analysis.
+
+## Additional Analysis
+
+**Is there a relationship between gender percentages and average SAT scores? Does race play a role in this?**
+
+This could be interesting.
+
+We'll first start by creating a sub-dataframe with just the data we want for this. Let's remind ourselves of the columns using `glimpse`
+
+```{r}
+glimpse(combined_survey)
+```
+
+```{r}
+# Filtering out columns
+race_gender <- combined_survey %>%
+  select(avg_sat_score, asian_per:female_per)
+
+glimpse(race_gender)
+```
+
+Let's see how many rows we end up with if we just remove all NA values
+
+```{r}
+# Removing NAs
+race_gender <- race_gender %>% 
+  drop_na()
+
+glimpse(race_gender)
+```
+
+We could of course have just replaced all NA values with the mean of each column doing something like this:
+
+```{r}
+#race_gender <- race_gender %>%
+  #mutate(asian_per = if_else(is.na(asian_per), mean(asian_per, na.rm = TRUE), asian_per)) %>%
+  #mutate(white_per = if_else(is.na(white_per), mean(white_per, na.rm = TRUE), white_per))
+```
+
+However, for this analysis, we'll just remove them.
+
+Now, let's transform the data into two different dataframes. One as it is, and one where we add all the race categories to a single column using `pivot_longer`. We'll also do the same for all gender categories. This is just to show some different ways we could transform this data.
+
+```{r}
+# Wide data
+race_gender_wide <- race_gender
+
+# Long data Race
+race_long <- race_gender_wide %>%
+  pivot_longer(
+    cols = c(asian_per:white_per),
+    names_to = "race",
+    values_to = "percentage"
+  )
+
+# Long Data Gender
+gender_long <- race_gender_wide %>%
+  pivot_longer(
+    cols = c(male_per, female_per),
+    names_to = "gender",
+    values_to = "percentage"
+  )
+
+# Long Data Gender
+gender_race_long <- race_gender_wide %>%
+  pivot_longer(
+    cols = c(male_per, female_per),
+    names_to = "gender",
+    values_to = "gender_percentage"
+  ) %>%
+  pivot_longer(
+    cols = c(asian_per:white_per),
+    names_to = "race",
+    values_to = "race_percentage"
+  )
+```
+
+Now that we have transformed our data and dealt with missing values, let's create some visualizations
+
+```{r}
+glimpse(race_gender_wide)
+glimpse(race_long)
+glimpse(gender_long)
+glimpse(gender_race_long)
+```
+
+```{r}
+race_gender_wide %>%
+  ggplot(aes(x = female_per, y = avg_sat_score)) +
+  geom_point() +
+  labs(
+    title = "SAT score by female percentage",
+    x = "Female Percentage",
+    y = "SAT Score Average"
+  )
+cor(race_gender_wide$female_per, race_gender_wide$avg_sat_score)
+```
+We can see that there is no real correlation here. Most schools have an equal balance of males to females. It's only in these schools that we see some average SAT scores going to higher limits. Schools that are mostly female, or mostly male, tend not to have extremely high average SAT scores.
+
+To be continued....
+
+
+
+
